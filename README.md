@@ -1,1 +1,1 @@
-# Sequences
+# Miscellaneous vendor-agnostic sequences
