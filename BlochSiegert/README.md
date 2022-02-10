@@ -1,3 +1,5 @@
 # Stack of spirals Bloch Siegert scan
 
-Spatially non-selective; fat sat  
+fat sat  
+FOV 24x24x20 cm  
+Voxel size 4 mm iso
