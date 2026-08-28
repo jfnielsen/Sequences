@@ -1,0 +1,98 @@
+% Create and inspect/validate the sequence file
+
+seq_name = 'b0';       % Pulseq file name (without the .seq extension)
+
+pislquant = 10;     % number of shots/ADC events used for receive gain calibration
+
+%---------------------------------------------------------------
+% Write the .seq file
+%---------------------------------------------------------------
+writeB0;
+
+%---------------------------------------------------------------
+% Convert .seq file to a PulSeg sequence (psg) object
+%---------------------------------------------------------------
+psg = pulseg.fromSeq([seq_name '.seq']);   % ,'usesRotationEvents', false);
+
+%---------------------------------------------------------------
+% Define hardware parameters for your scanner
+%---------------------------------------------------------------
+psd_rf_wait  = 100e-6;   % RF–gradient delay (s), scanner-specific
+psd_grd_wait = 100e-6;   % ADC–gradient delay (s), scanner-specific
+b1_max   = 0.25;         % Gauss
+g_max    = 5;            % Gauss/cm
+slew_max = 20;           % Gauss/cm/ms
+coil     = 'xrm';        % See pge2.opts(). 'xrm' (MR750), 'hrmw' (Premier), 'magnus', ...
+
+sys_ge = pge2.opts(psd_rf_wait, psd_grd_wait, b1_max, g_max, slew_max, coil);
+
+%---------------------------------------------------------------
+% Check PNS, timing, and b1/gradient limits
+% (gradient heating, SAR, and other RF checks are evaluated by the
+% interpreter at scan time.)
+%---------------------------------------------------------------
+PNSwt = [0.8 1 0.7];   % directional PNS weights, see pge2.pns()
+params = pge2.check(psg, sys_ge, 'PNSwt', PNSwt);
+
+%------------------------------------------------------------------------------
+% Save psg object as .mat file for Matlab runtime based scanner workflow.
+% See https://github.com/HarmonizedMRI/pge2/tree/main/scanner/fov_prescription
+%------------------------------------------------------------------------------
+save(seq_name, 'psg', 'params', 'pislquant');  % TODO: get sys_ge from scanner config files
+
+%---------------------------------------------------------------
+% Plot the psg sequence
+%---------------------------------------------------------------
+S = pge2.plot(psg, sys_ge, 'blockRange', [1 2], ...
+    'PNSwt', PNSwt, ...
+    'rotate', false, ...
+    'interpolate', false);
+%S = pge2.plot(psg, sys_ge, 'timeRange',  [0 0.02], 'rotate', true);
+
+%---------------------------------------------------------------
+% Validate psg representation against the original .seq file
+%---------------------------------------------------------------
+seq = mr.Sequence();
+seq.read([seq_name '.seq']);
+
+% Cycle through all segment instances and stop on first mismatch
+pge2.validate(psg, sys_ge, seq, [], 'row', [], 'plot', false);
+
+% Plot each segment instance before proceeding
+%pge2.validate(psg, sys_ge, seq, [], 'row', [], 'plot', true);
+
+% Check only segments beginning at/after block 1000
+%pge2.validate(psg, sys_ge, seq, [], 'row', 1000, 'plot', true);
+
+%---------------------------------------------------------------
+% Apply slice offset and write PulSeg object to .pge file.
+% x/y/zloc are obtained from the User CVs menu on the console.
+% pislquant = # of ADC events used to set Rx gains in Auto Prescan
+%---------------------------------------------------------------
+xloc = 0;
+yloc = 0;
+zloc = 0;   % m
+psg = pge2.translateFOVrf(psg, [xloc yloc zloc]);
+pge2.serialize(psg, [seq_name '.pge'], 'pislquant', 10, 'params', params, 'checkHash', false);
+
+%---------------------------------------------------------------
+% Validate the GE simulator XML output (created by WTools/Pulse View)
+% against the original .seq file.  For MR30.2 and later.
+%---------------------------------------------------------------
+%xml_path = '~/transfer/xml/';   % directory for Pulse View .xml files
+%pge2.validate(psg, sys_ge, seq, xml_path, 'row', [], 'plot', true);
+
+% Check mechanical resonances (forbidden frequency bands).
+% Forbidden EPI spacings are listed in /srv/nfs/psd/etc/epiesp*.dat
+% on your scanner -- consult your GE representative to identify the specific file.
+% Example epiesp.dat:  
+%   forbidden EPI spacing (x) = [410 510] us
+%   forbidden EPI spacing (y) = [410 510] us
+%   forbidden EPI spacing (z) = [360 440] us
+forbidden_esp = [410 510; 410 510; 360 440]*1e-6;  % sec
+forbidden_freq_range = 1./fliplr(forbidden_esp)/2;
+for ax = 1:size(forbidden_freq_range,1)
+    FB(ax).bw = diff(forbidden_freq_range(ax,:));
+    FB(ax).freq = forbidden_freq_range(ax,1) + FB(ax).bw/2;
+end
+seq.gradSpectrum(FB);
