@@ -75,6 +75,8 @@ zloc = 0;   % m
 psg = pge2.translateFOVrf(psg, [xloc yloc zloc]);
 pge2.serialize(psg, [seq_name '.pge'], 'pislquant', 10, 'params', params, 'checkHash', false);
 
+return
+
 %---------------------------------------------------------------
 % Validate the GE simulator XML output (created by WTools/Pulse View)
 % against the original .seq file.  For MR30.2 and later.
