@@ -5,8 +5,6 @@
 % RF/gradient delay (sec). 
 % Conservative choice that should work across all GE scanners.
 psd_rf_wait = 200e-6;  
-addpath(genpath("pulseq/"))
-addpath(genpath("B0shimming/"))
 % System/design parameters.
 % Here we extend rfRingdownTime by psd_rf_wait to ensure that 
 % the subsequent wait pulse (delay block) doesn't overlap with
